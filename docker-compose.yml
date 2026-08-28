@@ -1,0 +1,38 @@
+# 温度监控系统生产编排
+# 启动：docker compose up -d --build
+# 访问：http://localhost:8080
+services:
+  gateway:
+    build:
+      context: ./server
+    image: temperature-gateway:0.1.0
+    container_name: temperature-gateway
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      # 生产环境务必通过 .env 或宿主环境覆盖为强随机值
+      AUTH_SECRET: ${AUTH_SECRET:-change-me-in-production}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    # 不对外暴露端口，仅由 frontend 的 nginx 内网反代（缩小攻击面）
+    expose:
+      - "4000"
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_GATEWAY_BASE_URL: ""
+    image: temperature-panel:0.1.0
+    container_name: temperature-panel
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "8080:80"
