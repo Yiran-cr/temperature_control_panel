@@ -31,7 +31,8 @@ export default function ParticleBackground() {
     window.addEventListener('resize', resize);
 
     const particles: Particle[] = [];
-    const MAX_PARTICLES = 80;
+    // 移动端减少粒子数量，避免低端手机掉帧
+    const MAX_PARTICLES = window.innerWidth < 640 ? 30 : 80;
 
     for (let i = 0; i < MAX_PARTICLES; i++) {
       particles.push({

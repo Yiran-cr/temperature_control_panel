@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# 环境变量（含数据库凭据，不应入库；部署时按 .env.example 复制配置）
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

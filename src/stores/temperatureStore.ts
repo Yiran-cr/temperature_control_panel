@@ -1,19 +1,16 @@
 import { create } from 'zustand';
-import { ALERT_THRESHOLD, evaluateAlert } from '../domain/alertPolicy';
-import type { AlertLevel, TemperaturePoint } from '../domain/temperature';
-import { BUFFER_MAX_SIZE, DEFAULT_RANGE_MS, dataSourceConfig } from '../config';
+import type { TemperaturePoint } from '../domain/temperature';
+import { BUFFER_MAX_SIZE, DEFAULT_RANGE_MS } from '../config';
 import { RealtimeBuffer } from '../infrastructure/RealtimeBuffer';
 import { createSource } from '../infrastructure/factory';
 import type { TemperatureSource } from '../infrastructure/ports';
 import { useConnectionStore } from './connectionStore';
-import { useAlertStore } from './alertStore';
 import { useTimeRangeStore } from './timeRangeStore';
 
 interface TemperatureState {
   source: TemperatureSource | null;
   buffer: RealtimeBuffer | null;
   current: TemperaturePoint | null;
-  alertLevel: AlertLevel;
   history: TemperaturePoint[];
   loading: boolean;
   error: string | null;
@@ -30,7 +27,6 @@ export const useTemperatureStore = create<TemperatureState>((set, get) => ({
   source: null,
   buffer: null,
   current: null,
-  alertLevel: 'none',
   history: [],
   loading: true,
   error: null,
@@ -45,11 +41,11 @@ export const useTemperatureStore = create<TemperatureState>((set, get) => ({
     useConnectionStore.getState().setStatus('connecting');
 
     try {
-      await source.connect(dataSourceConfig);
+      await source.connect();
       useConnectionStore.getState().setStatus('connected');
 
       const current = await source.getCurrent();
-      set({ current, alertLevel: evaluateAlert(current.value, ALERT_THRESHOLD) });
+      set({ current });
 
       // 实时流：并入缓冲（去重 / 窗口裁剪在缓冲内完成）
       source.subscribe((point) => {
@@ -57,12 +53,8 @@ export const useTemperatureStore = create<TemperatureState>((set, get) => ({
         set({
           history: buffer.snapshot(),
           current: point,
-          alertLevel: evaluateAlert(point.value, ALERT_THRESHOLD),
         });
       });
-
-      // 告警直接投递到告警 store
-      source.onAlert((alert) => useAlertStore.getState().addAlert(alert));
 
       // 加载初始历史（时间范围以 timeRangeStore 为准）
       await get().refreshHistory(useTimeRangeStore.getState().rangeMs);

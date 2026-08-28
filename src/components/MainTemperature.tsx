@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import type { TemperaturePoint, AlertLevel } from '../domain';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { TemperaturePoint } from '../domain';
 import { toDisplayColor } from '../domain';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { useIsLargeScreen } from '../hooks/useIsLargeScreen';
 
 interface MainTemperatureProps {
   point: TemperaturePoint | null;
   name: string;
-  alertLevel: AlertLevel;
+  /** 历史数据：驱动仪表盘量程自动缩放（与线型图 Y 轴同规则） */
+  history?: TemperaturePoint[];
 }
 
 /**
@@ -14,13 +17,21 @@ interface MainTemperatureProps {
  * 包含：
  * - 超大温度数字（翻牌滚动动画）
  * - SVG 弧形仪表盘（冷色渐变 + 刻度 + 光晕）
- * - 告警颜色变化/脉冲
  */
-export default function MainTemperature({
-  point,
-  name,
-  alertLevel,
-}: MainTemperatureProps) {
+export default function MainTemperature({ point, name, history }: MainTemperatureProps) {
+  const isMobile = useIsMobile();
+  const isLarge = useIsLargeScreen();
+
+  // 仪表盘量程：按历史最高/最低温动态缩放（与线型图 Y 轴同一套余量规则），
+  // 替代固定 -35~15，保证弧线始终清晰可读
+  const gauge = useMemo(
+    () =>
+      computeGaugeRange(
+        history && history.length > 0 ? history.map((d) => d.value) : point ? [point.value] : [],
+      ),
+    [history, point],
+  );
+
   // 翻牌动画的"上一值"由 DigitRoller 内部自管，无需在此派生状态
   if (!point) {
     return (
@@ -32,17 +43,21 @@ export default function MainTemperature({
     );
   }
 
-  const isAlert = alertLevel !== 'none';
-  const tempColor = isAlert ? '#ff3860' : toDisplayColor(point.value);
+  const tempColor = toDisplayColor(point.value);
 
   // 数字部分使用固定宽度字体，避免数字变化时左右抖动
   const numberFontFamily =
     '"Roboto Mono", "JetBrains Mono", "Consolas", "Courier New", monospace';
 
   return (
-    <div style={containerStyle}>
-      {/* SVG 弧形仪表盘 */}
-      <svg viewBox="0 0 400 220" style={svgStyle}>
+    <div
+      style={isLarge ? largeContainerStyle : isMobile ? mobileContainerStyle : containerStyle}
+    >
+      {/* SVG 弧形仪表盘（viewBox 固定比例，宽度随容器自适应缩放） */}
+      <svg
+        viewBox="0 0 400 220"
+        style={isLarge ? largeSvgStyle : isMobile ? mobileSvgStyle : svgStyle}
+      >
         {/* 背景弧 */}
         <path
           d="M 40 180 A 160 160 0 0 1 360 180"
@@ -51,17 +66,11 @@ export default function MainTemperature({
           strokeWidth="12"
           strokeLinecap="round"
         />
-        {/* 温度弧线 - 根据温度映射角度 */}
-        <ArcPath
-          value={point.value}
-          min={-35}
-          max={15}
-          color={tempColor}
-          isAlert={isAlert}
-        />
-        {/* 刻度 */}
-        {[-35, -25, -15, -5, 5, 15].map((t) => {
-          const angle = mapTempToAngle(t, -35, 15);
+        {/* 温度弧线 - 根据温度映射角度（量程随数据动态缩放） */}
+        <ArcPath value={point.value} min={gauge.min} max={gauge.max} color={tempColor} />
+        {/* 刻度 - 随量程动态生成 */}
+        {gauge.ticks.map((t) => {
+          const angle = mapTempToAngle(t, gauge.min, gauge.max);
           return (
             <g key={t}>
               <line
@@ -86,26 +95,21 @@ export default function MainTemperature({
             </g>
           );
         })}
-        {/* 告警脉冲环 */}
-        {isAlert && (
-          <circle
-            cx="200"
-            cy="180"
-            r="155"
-            fill="none"
-            stroke="#ff3860"
-            strokeWidth="2"
-            opacity="0.4"
-            className="alert-pulse-ring"
-          />
-        )}
       </svg>
 
       {/* 超大温度数字 */}
-      <div style={numberContainerStyle}>
+      <div
+        style={
+          isLarge
+            ? largeNumberContainerStyle
+            : isMobile
+              ? mobileNumberContainerStyle
+              : numberContainerStyle
+        }
+      >
         <div
           style={{
-            fontSize: 72,
+            fontSize: isLarge ? 88 : isMobile ? 46 : 72,
             fontWeight: 800,
             color: tempColor,
             textShadow: `0 0 40px ${tempColor}40, 0 0 80px ${tempColor}20`,
@@ -115,23 +119,29 @@ export default function MainTemperature({
             letterSpacing: -1,
             lineHeight: 1,
             // 固定宽度容纳最大显示值（如 -35.0°C），数字变化也不引起整体位移
-            width: 320,
+            width: isLarge ? 420 : isMobile ? 200 : 320,
             textAlign: 'center',
             position: 'relative',
           }}
         >
           <DigitRoller value={point.value} />
-          <span style={{ fontSize: 28, fontWeight: 300, marginLeft: 4 }}>
+          <span
+            style={{
+              fontSize: isLarge ? 32 : isMobile ? 20 : 28,
+              fontWeight: 300,
+              marginLeft: 4,
+            }}
+          >
             °C
           </span>
         </div>
 
         <div
           style={{
-            fontSize: 13,
+            fontSize: isLarge ? 15 : isMobile ? 12 : 13,
             color: 'rgba(255,255,255,0.5)',
             marginTop: 8,
-            letterSpacing: 3,
+            letterSpacing: isLarge ? 4 : isMobile ? 2 : 3,
             textTransform: 'uppercase',
           }}
         >
@@ -141,7 +151,7 @@ export default function MainTemperature({
         {/* 更新时间 */}
         <div
           style={{
-            fontSize: 11,
+            fontSize: isLarge ? 12 : isMobile ? 10 : 11,
             color: 'rgba(255,255,255,0.35)',
             marginTop: 6,
             fontFamily: 'monospace',
@@ -164,30 +174,62 @@ function formatFullTime(ts: number): string {
   )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** 将温度值映射到弧线角度（-35°C → 0° → 15°C → 180°） */
+/** 将温度值映射到弧线角度（min → 0° → max → 180°） */
 function mapTempToAngle(value: number, min: number, max: number): number {
   const ratio = (value - min) / (max - min);
   return Math.PI * (1 - ratio); // 0 → π, 1 → 0
 }
 
-/** 温度值对应的弧线端点角度 */
-function tempToEndAngle(value: number): number {
-  const clamped = Math.max(-35, Math.min(15, value));
-  return mapTempToAngle(clamped, -35, 15);
+/**
+ * 动态仪表盘量程：以历史最高/最低温为基准，向外留 15%（至少 2°C）余量，
+ * 与线型图 Y 轴同一套规则，再按刻度步长取整，保证刻度清晰。
+ */
+function computeGaugeRange(values: number[]): {
+  min: number;
+  max: number;
+  ticks: number[];
+} {
+  let min = -10;
+  let max = 10;
+  if (values.length > 0) {
+    const dataMax = Math.max(...values);
+    const dataMin = Math.min(...values);
+    const span = dataMax - dataMin;
+    const padding = Math.max(span * 0.15, 2);
+    max = dataMax + padding;
+    min = dataMin - padding;
+  }
+
+  // 刻度步长按跨度自适应：跨度小用细刻度，跨度大用粗刻度
+  const span = max - min;
+  const step = span <= 12 ? 2 : span <= 30 ? 5 : 10;
+  const tickMin = Math.floor(min / step) * step;
+  const tickMax = Math.ceil(max / step) * step;
+  const ticks: number[] = [];
+  for (let t = tickMin; t <= tickMax + 1e-9; t += step) {
+    ticks.push(Math.round(t * 10) / 10);
+  }
+  return { min: tickMin, max: tickMax, ticks };
+}
+
+/** 温度值对应的弧线端点角度（量程动态传入） */
+function tempToEndAngle(value: number, min: number, max: number): number {
+  const clamped = Math.max(min, Math.min(max, value));
+  return mapTempToAngle(clamped, min, max);
 }
 
 function ArcPath({
   value,
+  min,
+  max,
   color,
-  isAlert,
 }: {
   value: number;
   min: number;
   max: number;
   color: string;
-  isAlert: boolean;
 }) {
-  const endAngle = tempToEndAngle(value);
+  const endAngle = tempToEndAngle(value, min, max);
 
   const cx = 200,
     cy = 180,
@@ -210,30 +252,10 @@ function ArcPath({
         stroke={color}
         strokeWidth="12"
         strokeLinecap="round"
-        className={isAlert ? 'alert-pulse-stroke' : ''}
         style={{
           filter: `drop-shadow(0 0 8px ${color}60)`,
           transition: 'stroke 0.5s',
         }}
-      />
-      {/* 端点发光圆点 */}
-      <circle
-        cx={endX}
-        cy={endY}
-        r="6"
-        fill={color}
-        style={{
-          filter: `drop-shadow(0 0 12px ${color})`,
-          transition: 'fill 0.5s',
-        }}
-      />
-      <circle
-        cx={endX}
-        cy={endY}
-        r="3"
-        fill="#fff"
-        opacity="0.8"
-        style={{ transition: 'all 0.5s' }}
       />
     </>
   );
@@ -281,9 +303,33 @@ const containerStyle: React.CSSProperties = {
   padding: '20px 0',
 };
 
+const mobileContainerStyle: React.CSSProperties = {
+  ...containerStyle,
+  padding: '12px 0 8px',
+};
+
+const largeContainerStyle: React.CSSProperties = {
+  ...containerStyle,
+  padding: '28px 0 20px',
+};
+
 const svgStyle: React.CSSProperties = {
   width: 400,
   height: 220,
+  overflow: 'visible',
+};
+
+const mobileSvgStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 400,
+  height: 'auto',
+  overflow: 'visible',
+};
+
+const largeSvgStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 700,
+  height: 330,
   overflow: 'visible',
 };
 
@@ -294,4 +340,14 @@ const numberContainerStyle: React.CSSProperties = {
   transform: 'translate(-50%, -50%)',
   textAlign: 'center',
   marginTop: 20,
+};
+
+const mobileNumberContainerStyle: React.CSSProperties = {
+  ...numberContainerStyle,
+  marginTop: 16,
+};
+
+const largeNumberContainerStyle: React.CSSProperties = {
+  ...numberContainerStyle,
+  marginTop: 28,
 };

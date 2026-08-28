@@ -23,10 +23,12 @@ const envSchema = z.object({
   TDENGINE_TEMP_FIELD: z.string().min(1),
   TDENGINE_TS_FIELD: z.string().default('ts'),
 
-  // 轮询与告警
+  // 轮询
   POLL_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
-  ALERT_HIGH: z.coerce.number().default(6),
-  ALERT_LOW: z.coerce.number().default(2),
+
+  // ===== 模板化显示配置（不同用户部署时按需覆盖）=====
+  STORAGE_ID: z.string().min(1).default('cold-storage-01'),
+  STORAGE_NAME: z.string().min(1).default('冷库'),
 });
 
 export type GatewayConfig = z.infer<typeof envSchema>;

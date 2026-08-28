@@ -2,14 +2,13 @@
 
 interface ImportMetaEnv {
   readonly VITE_USE_MOCK: string;
-  readonly VITE_TDENGINE_TARGET: string;
-  readonly VITE_TDENGINE_BASE_URL: string;
-  readonly VITE_TDENGINE_AUTH: string;
-  readonly VITE_TDENGINE_DATABASE: string;
-  readonly VITE_TDENGINE_STABLE: string;
-  readonly VITE_TDENGINE_TEMP_FIELD: string;
-  readonly VITE_TDENGINE_TS_FIELD: string;
-  readonly VITE_TDENGINE_POLL_INTERVAL: string;
+  readonly VITE_DATA_SOURCE: string;
+  readonly VITE_GATEWAY_BASE_URL: string;
+  readonly VITE_GATEWAY_USERNAME: string;
+  readonly VITE_GATEWAY_PASSWORD: string;
+  readonly VITE_APP_TITLE: string;
+  readonly VITE_STORAGE_ID: string;
+  readonly VITE_STORAGE_NAME: string;
 }
 
 interface ImportMeta {

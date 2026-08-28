@@ -10,23 +10,10 @@ export interface TemperaturePoint {
   unit: '°C';
 }
 
-/** 告警级别 */
-export type AlertLevel = 'none' | 'high' | 'low';
-
-/** 告警事件 */
-export interface AlertEvent {
-  storageId: string;
-  temperature: number;
-  level: Exclude<AlertLevel, 'none'>;
-  message: string;
-  timestamp: number;
-}
-
 /** 实时链路初始快照 */
 export interface RealtimeSnapshot {
   current: TemperaturePoint | null;
   history: TemperaturePoint[];
-  alerts: AlertEvent[];
   serverTime: number;
 }
 
@@ -39,5 +26,4 @@ export interface ClientMessage {
 export type ServerMessage =
   | { type: 'snapshot'; payload: RealtimeSnapshot }
   | { type: 'point'; payload: TemperaturePoint }
-  | { type: 'alert'; payload: AlertEvent }
   | { type: 'pong'; payload: { serverTime: number } };

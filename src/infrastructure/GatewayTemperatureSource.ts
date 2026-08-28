@@ -1,5 +1,5 @@
-import type { AlertEvent, TemperaturePoint } from '../domain/temperature';
-import type { DataSourceConfig, TemperatureSource } from './ports';
+import type { TemperaturePoint } from '../domain/temperature';
+import type { TemperatureSource } from './ports';
 
 /**
  * GatewayTemperatureSource - 网关数据源实现
@@ -7,8 +7,8 @@ import type { DataSourceConfig, TemperatureSource } from './ports';
  * 数据链路（替代浏览器直连 TDengine）：
  * 1. POST /api/login 换取 JWT
  * 2. GET  /api/ws-ticket 换取短时 WS 升级票据
- * 3. WS   /ws?ticket=... 建立实时通道，首帧即快照（当前值 + 历史 + 近期告警）
- * 4. 快照后续的增量 point/alert 实时广播
+ * 3. WS   /ws?ticket=... 建立实时通道，首帧即快照（当前值 + 历史）
+ * 4. 快照后续的增量 point 实时广播
  *
  * 安全收益：TDengine 凭据只存在于服务端，浏览器只持有短期 JWT。
  */
@@ -21,14 +21,12 @@ export interface GatewaySourceConfig {
 interface RealtimeSnapshot {
   current: TemperaturePoint | null;
   history: TemperaturePoint[];
-  alerts: AlertEvent[];
   serverTime: number;
 }
 
 type ServerMessage =
   | { type: 'snapshot'; payload: RealtimeSnapshot }
   | { type: 'point'; payload: TemperaturePoint }
-  | { type: 'alert'; payload: AlertEvent }
   | { type: 'pong'; payload: { serverTime: number } };
 
 /** 等待首帧快照的超时 */
@@ -47,9 +45,6 @@ export class GatewayTemperatureSource implements TemperatureSource {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   private subscribers = new Set<(p: TemperaturePoint) => void>();
-  private alertCallbacks = new Set<(a: AlertEvent) => void>();
-  private alertHistory: AlertEvent[] = [];
-  private alertHistoryReplayed = false;
 
   private current: TemperaturePoint | null = null;
   private stopped = true;
@@ -70,7 +65,7 @@ export class GatewayTemperatureSource implements TemperatureSource {
 
   // ========== 接口实现 ==========
 
-  async connect(_config?: DataSourceConfig): Promise<void> {
+  async connect(): Promise<void> {
     this.stopped = false;
     const token = await this.login();
     this.token = token;
@@ -89,8 +84,6 @@ export class GatewayTemperatureSource implements TemperatureSource {
     this.token = null;
     this.current = null;
     this.subscribers.clear();
-    this.alertCallbacks.clear();
-    this.alertHistoryReplayed = false;
   }
 
   async getCurrent(): Promise<TemperaturePoint> {
@@ -117,18 +110,6 @@ export class GatewayTemperatureSource implements TemperatureSource {
     this.subscribers.add(callback);
     return () => {
       this.subscribers.delete(callback);
-    };
-  }
-
-  onAlert(callback: (alert: AlertEvent) => void): () => void {
-    this.alertCallbacks.add(callback);
-    // 冷启动时回放快照中的近期告警，让界面立即呈现历史告警上下文
-    if (!this.alertHistoryReplayed && this.alertHistory.length > 0) {
-      this.alertHistoryReplayed = true;
-      for (const alert of this.alertHistory) callback(alert);
-    }
-    return () => {
-      this.alertCallbacks.delete(callback);
     };
   }
 
@@ -181,17 +162,12 @@ export class GatewayTemperatureSource implements TemperatureSource {
         switch (msg.type) {
           case 'snapshot':
             this.current = msg.payload.current;
-            this.alertHistory = msg.payload.alerts;
             clearTimeout(timeout);
             resolve();
             break;
           case 'point':
             this.current = msg.payload;
             this.subscribers.forEach((cb) => cb(msg.payload));
-            break;
-          case 'alert':
-            this.alertHistory.push(msg.payload);
-            this.alertCallbacks.forEach((cb) => cb(msg.payload));
             break;
           case 'pong':
             break;

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "冷库温度监控系统",
+    "output": "architecture.html",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1000, 560],
+    "views": [
+      { "id": "request-path", "label": "主数据路径", "focus": ["ui", "stores", "infra", "gateway", "tdengine"], "note": "从浏览器面板到网关再到 TDengine 的实时温度主路径。" },
+      { "id": "domain-and-ports", "label": "领域规则与端口契约", "focus": ["stores", "domain", "infra"], "note": "领域规则单点定义，业务层只依赖 TemperatureSource 端口契约。" }
+    ]
+  },
+  "components": [
+    { "id": "ui", "type": "frontend", "label": "展示组件", "sublabel": "React · props 驱动", "pos": [60, 80], "size": [170, 62] },
+    { "id": "stores", "type": "frontend", "label": "状态层", "sublabel": "Zustand 切片编排", "pos": [60, 210], "size": [170, 62] },
+    { "id": "infra", "type": "frontend", "label": "基础设施层", "sublabel": "TemperatureSource 端口", "pos": [320, 210], "size": [170, 62], "tag": "Mock / 直连 / 网关可插拔" },
+    { "id": "domain", "type": "frontend", "label": "领域层", "sublabel": "告警阈值 · 统计规则", "pos": [60, 340], "size": [170, 62] },
+    { "id": "gateway", "type": "backend", "label": "网关 Gateway", "sublabel": "Node.js · HTTP + WS :4000", "pos": [590, 210], "size": [220, 95], "tag": "JWT + WS 票据" },
+    { "id": "tdengine", "type": "database", "label": "TDengine", "sublabel": "时序库 REST :6041", "pos": [590, 380], "size": [210, 85] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "前端面板 (React 19 + Vite · 浏览器)", "wraps": ["ui", "stores", "domain", "infra"] },
+    { "kind": "security-group", "label": "服务端可信区 · 凭据只存于此", "wraps": ["gateway", "tdengine"] }
+  ],
+  "connections": [
+    { "id": "ui-to-stores", "from": "ui", "to": "stores", "label": "selector", "fromSide": "bottom", "toSide": "top", "labelAt": [215, 176] },
+    { "id": "stores-to-domain", "from": "stores", "to": "domain", "label": "规则", "fromSide": "bottom", "toSide": "top", "labelAt": [145, 306] },
+    { "id": "stores-to-infra", "from": "stores", "to": "infra", "label": "端口契约" },
+    { "id": "infra-to-gateway", "from": "infra", "to": "gateway", "label": "HTTP + WS", "variant": "emphasis" },
+    { "id": "gateway-to-tdengine", "from": "gateway", "to": "tdengine", "label": "REST", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "主数据路径", "items": ["浏览器面板 → 网关 → TDengine 实时温度链路", "RealtimeBuffer 按时间戳去重、按时间窗裁剪"] },
+    { "dot": "emerald", "title": "端口契约", "items": ["业务层只依赖 TemperatureSource 端口", "数据源 Mock / 直连 / 网关可插拔切换"] },
+    { "dot": "rose", "title": "安全与部署", "items": ["TDengine 凭据只存在于网关，浏览器持短期 JWT", "生产 nginx 同源反代 /api、/ws，网关不暴露公网"] }
+  ]
+}

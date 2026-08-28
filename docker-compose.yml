@@ -1,4 +1,6 @@
-# 温度监控系统生产编排
+# 温度显示模板 · 生产编排
+# 说明：本模板可被不同用户复用；数据库连接、登录凭证、展示名称等
+#      全部通过环境变量注入（.env / 宿主环境变量），代码内无硬编码。
 # 启动：docker compose up -d --build
 # 访问：http://localhost:8080
 services:
@@ -9,9 +11,10 @@ services:
     container_name: temperature-gateway
     restart: unless-stopped
     env_file:
+      # 数据库连接（TDENGINE_*）、登录凭证、STORAGE_* 均由此文件注入
       - ./server/.env
     environment:
-      # 生产环境务必通过 .env 或宿主环境覆盖为强随机值
+      # 生产环境务必通过宿主环境变量覆盖为强随机值
       AUTH_SECRET: ${AUTH_SECRET:-change-me-in-production}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
@@ -27,7 +30,12 @@ services:
     build:
       context: .
       args:
+        # 同源反代模式（nginx → gateway），无需外部网关地址
         VITE_GATEWAY_BASE_URL: ""
+        # 模板化显示配置（部署时可按用户覆盖）
+        VITE_APP_TITLE: ${VITE_APP_TITLE:-冷库温度监控系统}
+        VITE_STORAGE_ID: ${VITE_STORAGE_ID:-cold-storage-01}
+        VITE_STORAGE_NAME: ${VITE_STORAGE_NAME:-冷库}
     image: temperature-panel:0.1.0
     container_name: temperature-panel
     restart: unless-stopped

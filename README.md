@@ -20,9 +20,17 @@
 └────────────┘   JWT / snapshot / point    └──────────────┘   凭据只在服务端   └──────────────┘
 ```
 
+**交互式架构图**（支持明暗主题、缩放、搜索、焦点、关系追踪、语义视图与导出）：
+
+<a href="docs/architecture.html" title="打开交互式架构图（在新窗口）">
+  <img src="docs/architecture.visual-check.1440x900.light.png" alt="冷库温度监控系统架构图" />
+</a>
+
+> 亮色预览为 1440×900 截图；打开 [architecture.html](docs/architecture.html) 可查看可交互的完整版本。
+
 核心设计原则：
 
-1. **领域规则单点定义**：告警阈值、统计计算收敛在 `src/domain/`，禁止在组件/数据源里再写死
+1. **领域规则单点定义**：温度配色、统计计算收敛在 `src/domain/`，禁止在组件/数据源里再写死
 2. **端口契约（ISP）**：业务层只依赖 `TemperatureSource` 接口，不感知具体数据源实现
 3. **凭据下沉**：TDengine 凭据只存在于网关服务端，浏览器只持有短期 JWT
 4. **实时与历史合并**：`RealtimeBuffer` 按时间戳去重、按时间窗裁剪，避免图表重复点/截断
@@ -72,7 +80,7 @@ npm run dev
 npm run dev        # 开发服务器
 npm run build      # tsc 类型检查 + vite 生产构建
 npm run lint       # ESLint 检查
-npm test           # Vitest 单元测试（18 个用例）
+npm test           # Vitest 单元测试（9 个用例）
 ```
 
 常用命令（网关）
@@ -92,36 +100,34 @@ npm run typecheck  # 类型检查
 temperature_control_panel/
 ├── src/
 │   ├── domain/                  # ★ 领域层：业务规则与数据契约（纯函数，可单测）
-│   │   ├── temperature.ts       #   温度点 / 告警级别 / 告警事件类型
-│   │   ├── alertPolicy.ts       #   告警阈值(2~6°C) + 判定 + 文案 + 配色
+│   │   ├── temperature.ts       #   温度点类型
+│   │   ├── temperatureColor.ts  #   温度展示配色（纯视觉，无业务判定）
 │   │   └── stats.ts             #   最高/最低/平均温统计
 │   ├── infrastructure/          # ★ 基础设施层：数据源实现
 │   │   ├── ports.ts             #   端口契约（QueryPort / RealtimePort / TemperatureSource）
 │   │   ├── factory.ts           #   数据源工厂（按配置返回实现）
-│   │   ├── MockTemperatureSource.ts
-│   │   ├── TDengineTemperatureSource.ts   # 浏览器直连 TDengine（旧方式/降级）
+│   │   ├── MockTemperatureSource.ts       #   模拟数据源（演示/开发）
 │   │   ├── GatewayTemperatureSource.ts    # ★ 网关数据源（JWT + WebSocket）
 │   │   └── RealtimeBuffer.ts    #   实时/历史合并缓冲
 │   ├── stores/                  # ★ 状态层：Zustand 状态切片
 │   │   ├── temperatureStore.ts  #   主数据编排（init/dispose/refreshHistory）
-│   │   ├── alertStore.ts        #   告警列表 + 去抖
 │   │   ├── connectionStore.ts   #   连接状态 + 数据源名
 │   │   └── timeRangeStore.ts    #   历史时间范围（1H/6H/24H）
 │   ├── config/index.ts          # ★ 环境变量校验(zod) + 数据源选择 + 连接配置
 │   ├── components/              # 展示组件（纯 props 驱动）
 │   │   ├── Header.tsx / MainTemperature.tsx / HistoryChart.tsx
-│   │   ├── StatusCards.tsx / AlertBanner.tsx / ParticleBackground.tsx
+│   │   ├── StatusCards.tsx / ParticleBackground.tsx
 │   ├── App.tsx                  # 入口编排（读 store → 传 props）
 │   └── main.tsx
 ├── server/                      # ★ 后端网关
 │   ├── src/
 │   │   ├── main.ts              #   启动入口
 │   │   ├── config.ts            #   环境变量校验(zod)
-│   │   ├── domain/              #   服务端契约 + 告警判定（与前端对齐）
+│   │   ├── domain/              #   服务端契约（与前端对齐）
 │   │   ├── core/tdengine.ts     #   TDengine REST 客户端
 │   │   ├── http/                #   HTTP 路由 + JWT 鉴权
 │   │   └── ws/realtime.ts       #   WebSocket 实时推送
-│   └── .env                     #   网关配置（凭据/端口/阈值）
+│   └── .env                     #   网关配置（凭据/端口）
 ├── tests/                       # Vitest 单测
 ├── Dockerfile / docker-compose.yml / nginx.conf   # 生产部署
 └── .env                         # 前端环境变量
@@ -149,7 +155,6 @@ App 挂载
        ├─ source.connect(config)     登录/建连（网关：登录→换票→WS→快照）
        ├─ source.getCurrent()        取当前温度
        ├─ source.subscribe(cb)       实时点 → buffer.push → 更新 history/current
-       ├─ source.onAlert(cb)         告警事件 → alertStore.addAlert
        └─ refreshHistory(rangeMs)    调 getHistory → buffer.seed
 ```
 
@@ -163,19 +168,14 @@ App 挂载
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `VITE_DATA_SOURCE` | `mock` | 数据源类型：`mock` / `tdengine` / `gateway`（优先级最高） |
-| `VITE_USE_MOCK` | `true` | 兼容旧配置：`true`=mock，`false`=tdengine（仅在未设置 `VITE_DATA_SOURCE` 时生效） |
+| `VITE_DATA_SOURCE` | `mock` | 数据源类型：`mock` / `gateway`（优先级最高） |
+| `VITE_USE_MOCK` | `true` | 兼容旧配置：`true`=mock（仅在未设置 `VITE_DATA_SOURCE` 时生效） |
 | `VITE_GATEWAY_BASE_URL` | `http://localhost:4000` | 网关地址；生产构建传空串走同源反代 |
 | `VITE_GATEWAY_USERNAME` | `admin` | 网关登录用户名（对应 `server/.env` 的 `AUTH_USERNAME`） |
 | `VITE_GATEWAY_PASSWORD` | `admin` | 网关登录密码 |
-| `VITE_TDENGINE_BASE_URL` | `/api/tdengine` | 直连 TDengine 的 REST 基础路径（开发走 Vite 代理） |
-| `VITE_TDENGINE_AUTH` | `Basic cm9vdDp0YW9zZGF0YQ==` | TDengine 认证头（仅直连模式使用） |
-| `VITE_TDENGINE_DATABASE` | `scada` | 数据库名 |
-| `VITE_TDENGINE_STABLE` | `equ_refrigerator` | 超级表名 |
-| `VITE_TDENGINE_TEMP_FIELD` | `temperature_val` | 温度字段名 |
-| `VITE_TDENGINE_TS_FIELD` | `ts` | 时间戳字段名 |
-| `VITE_TDENGINE_POLL_INTERVAL` | `1000` | 直连模式轮询间隔（ms） |
-| `VITE_TDENGINE_TARGET` | `http://119.29.100.108:6041` | Vite 代理目标（仅开发） |
+| `VITE_APP_TITLE` | `冷库温度监控系统` | 页面标题（模板化，可按用户覆盖） |
+| `VITE_STORAGE_ID` | `cold-storage-01` | 冷库唯一 ID（模板化） |
+| `VITE_STORAGE_NAME` | `冷库` | 冷库显示名称（模板化） |
 
 ### 5.2 后端网关 `server/.env`
 
@@ -185,12 +185,12 @@ App 挂载
 | `AUTH_SECRET` | dev 占位值 | JWT 签名密钥，**生产必须替换为强随机值** |
 | `AUTH_USERNAME` / `AUTH_PASSWORD` | `admin` / `admin` | 登录凭证 |
 | `TOKEN_TTL_SEC` | `43200` | JWT 有效期（秒） |
-| `TDENGINE_BASE_URL` | `http://119.29.100.108:6041` | TDengine REST 地址 |
-| `TDENGINE_AUTH` | `Basic ...` | TDengine 认证头（root:taosdata） |
-| `TDENGINE_DATABASE` / `TDENGINE_STABLE` | `scada` / `equ_refrigerator` | 库 / 表 |
+| `TDENGINE_BASE_URL` | 按实际环境 | TDengine REST 地址（部署时配置，无硬编码） |
+| `TDENGINE_AUTH` | 按实际环境 | TDengine 认证头（用户名:密码 Base64） |
+| `TDENGINE_DATABASE` / `TDENGINE_STABLE` | 按实际环境 | 库 / 超级表 |
 | `TDENGINE_TEMP_FIELD` / `TDENGINE_TS_FIELD` | `temperature_val` / `ts` | 温度 / 时间字段 |
 | `POLL_INTERVAL_MS` | `1000` | 轮询推送间隔 |
-| `ALERT_HIGH` / `ALERT_LOW` | `6` / `2` | 服务端告警阈值（默认与前端一致） |
+| `STORAGE_ID` / `STORAGE_NAME` | `cold-storage-01` / `冷库` | 模板化显示配置（不同用户按需覆盖） |
 
 ---
 
@@ -208,37 +208,29 @@ export interface QueryPort {
 
 export interface RealtimePort {
   subscribe(callback: (point: TemperaturePoint) => void, storageId?: string): () => void;
-  onAlert(callback: (alert: AlertEvent) => void): () => void;
 }
 
 export type TemperatureSource = QueryPort & RealtimePort;
 ```
 
-`TemperaturePoint` / `AlertEvent` 定义在 [src/domain/temperature.ts](file:///e:/temperature_control_panel/src/domain/temperature.ts)：
+`TemperaturePoint` 定义在 [src/domain/temperature.ts](file:///e:/temperature_control_panel/src/domain/temperature.ts)：
 
 ```ts
 interface TemperaturePoint { value: number; timestamp: number; unit: '°C'; }  // timestamp 为 epoch 毫秒
-type AlertLevel = 'none' | 'high' | 'low';
-interface AlertEvent {
-  storageId: string;
-  temperature: number;
-  level: Exclude<AlertLevel, 'none'>;
-  message: string;
-  timestamp: number;
-}
 ```
 
-### 6.2 内置三种实现
+### 6.2 内置两种实现
 
 | 实现 | 数据来源 | 实时方式 | 适用场景 |
 | --- | --- | --- | --- |
 | `MockTemperatureSource` | 随机游走生成 | 1s 定时推送 | 开发演示、无后端联调 |
-| `TDengineTemperatureSource` | 浏览器直连 TDengine REST | 1s 轮询模拟 | 临时降级、内网直连 |
 | `GatewayTemperatureSource` | 后端网关（推荐） | WebSocket 真实推送 | **生产默认** |
+
+> 浏览器不再直连 TDengine：凭据只存在于网关服务端（`server/.env`），前端仅通过网关的 JWT + WebSocket 访问数据。
 
 ### 6.3 新增自定义数据源（三步）
 
-**① 实现 `TemperatureSource` 接口**：新建 `src/infrastructure/MySource.ts`，实现 6 个方法。
+**① 实现 `TemperatureSource` 接口**：新建 `src/infrastructure/MySource.ts`，实现 5 个方法。
 
 **② 注册到工厂**（[src/infrastructure/factory.ts](file:///e:/temperature_control_panel/src/infrastructure/factory.ts)）：
 
@@ -257,7 +249,7 @@ case 'mysource':
 ### 6.4 数据源切换方式
 
 ```bash
-# mock / tdengine / gateway 三选一
+# mock / gateway 二选一
 VITE_DATA_SOURCE=gateway
 ```
 
@@ -265,12 +257,8 @@ VITE_DATA_SOURCE=gateway
 
 ## 7. 领域层（业务规则单点定义）
 
-- **告警阈值**：`ALERT_THRESHOLD = { high: 6, low: 2 }`（冷链 2~6°C 正常），定义于 [src/domain/alertPolicy.ts](file:///e:/temperature_control_panel/src/domain/alertPolicy.ts)
-  - `evaluateAlert(value)` → `'none' | 'high' | 'low'`
-  - `buildAlertMessage(point, level)` → `AlertEvent`（统一文案出口）
-  - `toDisplayColor(value)` → 温度配色（高温红 / 低温冰蓝 / 正常）
+- **温度配色**：`toDisplayColor(value)`（[temperatureColor.ts](file:///e:/temperature_control_panel/src/domain/temperatureColor.ts)）→ 按温度区间映射展示色（偏热红 / 正常 / 偏凉 / 低温冰蓝），纯视觉、不参与业务判定
 - **统计**：`computeStats(history)`（[stats.ts](file:///e:/temperature_control_panel/src/domain/stats.ts)）→ 最高/最低/平均温
-- **规则唯一性**：改阈值只需改 `domain/alertPolicy.ts` 一处（网关侧同步改 `server/.env` 的 `ALERT_HIGH/ALERT_LOW`）
 
 ---
 
@@ -278,8 +266,7 @@ VITE_DATA_SOURCE=gateway
 
 | Store | 职责 | 关键字段/方法 |
 | --- | --- | --- |
-| `temperatureStore` | 主数据编排 | `current`、`history`、`alertLevel`、`loading`、`error`；`init()` / `dispose()` / `refreshHistory(rangeMs)` |
-| `alertStore` | 告警列表 | `alerts`；`addAlert()`（同级别 3s 去抖，上限 50 条）、`clear()` |
+| `temperatureStore` | 主数据编排 | `current`、`history`、`loading`、`error`；`init()` / `dispose()` / `refreshHistory(rangeMs)` |
 | `connectionStore` | 连接状态 | `status`（connecting/connected/error/disconnected）、`sourceName`；`setStatus()` |
 | `timeRangeStore` | 时间范围 | `rangeMs`；`setRange()`；`TIME_RANGES`（1H/6H/24H） |
 
@@ -326,7 +313,7 @@ const rangeMs = useTimeRangeStore((s) => s.rangeMs);
 | POST | `/api/login` | 否 | `{username,password}` | `{token, expiresIn}` |
 | GET | `/api/health` | 否 | - | `{status:'ok', time, uptime}` |
 | GET | `/api/ws-ticket` | Bearer | - | `{ticket}` |
-| GET | `/api/config` | Bearer | - | `{source, storageId, alert:{high,low}, pollIntervalMs}` |
+| GET | `/api/config` | Bearer | - | `{source, storageId, storageName, pollIntervalMs}` |
 | GET | `/api/history?minutes=30` | Bearer | - | `{points: TemperaturePoint[]}`（最近 N 分钟，升序） |
 
 ### 10.3 WebSocket 消息协议
@@ -344,20 +331,13 @@ const rangeMs = useTimeRangeStore((s) => s.rangeMs);
 { "type": "snapshot", "payload": {
     "current": { "value": 2.5, "timestamp": 1787936600000, "unit": "°C" },
     "history": [ { "value": 2.8, "timestamp": 1787936500000, "unit": "°C" } ],
-    "alerts":  [ { "storageId": "cold-storage-01", "temperature": 7.2,
-                   "level": "high", "message": "高温告警：7.2°C（阈值 > 6°C）",
-                   "timestamp": 1787936600000 } ],
     "serverTime": 1787936600000
 }}
 
 // ② 增量温度点（去重后广播）
 { "type": "point", "payload": { "value": 2.5, "timestamp": 1787936682000, "unit": "°C" } }
 
-// ③ 告警事件（仅状态跃迁进入告警时触发，避免刷屏）
-{ "type": "alert", "payload": { "storageId": "cold-storage-01", "temperature": 7.2,
-                                "level": "high", "message": "...", "timestamp": 1787936600000 } }
-
-// ④ 心跳响应
+// ③ 心跳响应
 { "type": "pong", "payload": { "serverTime": 1787936600000 } }
 ```
 
@@ -365,7 +345,6 @@ const rangeMs = useTimeRangeStore((s) => s.rangeMs);
 
 - **时间戳**：全部为 **epoch 毫秒**。TDengine REST 返回的 ISO 字符串/µs 数值由网关统一转为毫秒
 - **历史窗口**：网关 `/api/history` 按「最近 N 分钟」提供；前端按需传 `minutes`，客户端再精确裁剪到 `[from, to]`
-- **告警语义**：服务端用 `ALERT_HIGH/ALERT_LOW` 判定，`alert` 事件在**进入告警**的边沿触发一次
 
 ---
 
@@ -373,10 +352,9 @@ const rangeMs = useTimeRangeStore((s) => s.rangeMs);
 
 | 组件 | 职责 |
 | --- | --- |
-| `MainTemperature` | 主温度大数字（翻牌动画）+ SVG 弧形仪表盘 + 告警脉冲 |
-| `HistoryChart` | ECharts 面积折线图，含 2~6°C 阈值虚线、时间范围切换 |
-| `StatusCards` | 最高/最低/平均温 + 告警计数（配色取自 domain） |
-| `AlertBanner` | 最近告警横幅（8s 自动隐藏，最多显示 5 条） |
+| `MainTemperature` | 主温度大数字（翻牌动画）+ SVG 弧形仪表盘 |
+| `HistoryChart` | ECharts 面积折线图（Y 轴随数据自动缩放）、时间范围切换 |
+| `StatusCards` | 最高/最低/平均温（配色取自 domain） |
 | `Header` | 标题栏 + 连接状态 + 数据源名 |
 | `ParticleBackground` | 背景粒子动画（已 memo 化，不随数据重渲染） |
 
@@ -390,10 +368,8 @@ npm test
 
 | 测试文件 | 覆盖 |
 | --- | --- |
-| `tests/alertPolicy.test.ts` | 告警判定、消息生成、配色 |
 | `tests/stats.test.ts` | 统计计算（含空数据） |
 | `tests/realtimeBuffer.test.ts` | 去重、裁剪、窗口合并 |
-| `tests/alertStore.test.ts` | 告警去抖、上限 |
 
 ---
 
@@ -410,6 +386,27 @@ docker compose up -d --build
 - **健康检查**：网关 `/api/health` 供 Docker HEALTHCHECK 探测
 - **构建参数**：前端镜像 `VITE_GATEWAY_BASE_URL=""`（同源模式）
 
+### 13.1 模板化部署（多用户复用）
+
+本面板是「可复用温度显示模板」。部署给不同用户时，只需覆盖环境变量，**无需改任何代码**：
+
+| 场景 | 需配置的变量 | 效果 |
+| --- | --- | --- |
+| 连不同数据库 | `server/.env` 的 `TDENGINE_*` | 网关读取该用户的库表 |
+| 不同标题 | 前端 `VITE_APP_TITLE`（或 docker-compose 的 `${VITE_APP_TITLE:-...}`） | 页面标题 |
+| 不同冷库名称/ID | `VITE_STORAGE_NAME` / `VITE_STORAGE_ID`（docker-compose 同理） | 页面展示与数据标识 |
+| 不同登录凭证 | `AUTH_USERNAME` / `AUTH_PASSWORD` + 前端 `VITE_GATEWAY_*` | 鉴权隔离 |
+
+Docker 部署时在宿主机环境变量（或 `.env`）中覆盖：
+
+```bash
+# 例：给某用户部署为其专属标题与冷库
+VITE_APP_TITLE=医药冷库监控 VITE_STORAGE_NAME=医药冷库 VITE_STORAGE_ID=pharma-02 \
+docker compose up -d --build
+```
+
+> 数据库连接、展示名称、凭证全部外部注入，代码内无任何硬编码（见 `.env.example` / `server/.env.example`）。
+
 ---
 
 ## 14. 常见问题
@@ -425,12 +422,8 @@ docker compose up -d --build
 - 确认 `server/.env` 的 `TDENGINE_STABLE/TEMP_FIELD` 与库表结构一致（字段可用 `DESCRIBE <表名>` 查看）
 - 确认当前时间窗（1H/6H/24H）内确实有数据
 
-**Q4：想临时绕过网关直接用 TDengine？**
-- `.env` 设 `VITE_DATA_SOURCE=tdengine`，并确保 `VITE_TDENGINE_*` 配置正确（凭据会暴露给浏览器，仅限内网/开发）
+**Q4：不同用户部署时如何切换自己的数据库？**
+- 在 `server/.env` 中配置 `TDENGINE_BASE_URL`、`TDENGINE_AUTH`、`TDENGINE_DATABASE/STABLE/FIELD` 即可，无需改代码；页面标题与冷库名通过 `VITE_APP_TITLE` / `VITE_STORAGE_NAME` 覆盖（详见 13.1）
 
-**Q5：改告警阈值怎么改？**
-- 前端：改 [domain/alertPolicy.ts](file:///e:/temperature_control_panel/src/domain/alertPolicy.ts) 的 `ALERT_THRESHOLD`
-- 网关：改 `server/.env` 的 `ALERT_HIGH / ALERT_LOW`
-
-**Q6：端口被占用？**
+**Q5：端口被占用？**
 - Vite 会自动递增端口；网关端口在 `server/.env` 的 `PORT` 修改

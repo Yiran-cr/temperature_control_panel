@@ -32,6 +32,9 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 防止 iOS 横竖屏切换或输入时自动放大字体 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -40,6 +43,18 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+/* 触控优化：消除移动端双击缩放延迟，提升按钮点按响应 */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 大屏模式：视口高度占满（100dvh 兼容回退 100vh），配合 overflow:hidden 实现无滚动 */
+.app-viewport {
+  height: 100vh;
+  height: 100dvh;
 }
 
 /* 背景网格纹理 */
@@ -107,36 +122,6 @@ body::after {
     opacity: 0.5;
     transform: scale(0.85);
   }
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(40px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes alertPulse {
-  0%, 100% {
-    stroke-opacity: 0.6;
-    stroke-width: 2;
-  }
-  50% {
-    stroke-opacity: 0.1;
-    stroke-width: 4;
-  }
-}
-
-.alert-pulse-stroke {
-  animation: alertPulse 1.5s ease-in-out infinite;
-}
-
-.alert-pulse-ring {
-  animation: alertPulse 1.5s ease-in-out infinite;
 }
 
 /* 滚动条样式 */

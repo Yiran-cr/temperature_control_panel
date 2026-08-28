@@ -67,8 +67,8 @@ async function dispatch(
   if (method === 'GET' && pathname === '/api/config') {
     sendJson(res, 200, {
       source: 'gateway',
-      storageId: 'cold-storage-01',
-      alert: { high: deps.config.ALERT_HIGH, low: deps.config.ALERT_LOW },
+      storageId: deps.config.STORAGE_ID,
+      storageName: deps.config.STORAGE_NAME,
       pollIntervalMs: deps.config.POLL_INTERVAL_MS,
     });
     return;

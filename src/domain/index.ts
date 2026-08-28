@@ -1,3 +1,3 @@
 export * from './temperature';
-export * from './alertPolicy';
+export * from './temperatureColor';
 export * from './stats';
