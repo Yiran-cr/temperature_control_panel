@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { TemperaturePoint } from '../domain/temperature';
-import { BUFFER_MAX_SIZE, DEFAULT_RANGE_MS } from '../config';
+import { DEFAULT_RANGE_MS } from '../config';
 import { RealtimeBuffer } from '../infrastructure/RealtimeBuffer';
 import { createSource } from '../infrastructure/factory';
 import type { TemperatureSource } from '../infrastructure/ports';
@@ -36,7 +36,7 @@ export const useTemperatureStore = create<TemperatureState>((set, get) => ({
     if (get().source) return;
 
     const source = createSource();
-    const buffer = new RealtimeBuffer(BUFFER_MAX_SIZE, DEFAULT_RANGE_MS);
+    const buffer = new RealtimeBuffer(DEFAULT_RANGE_MS);
     set({ source, buffer, loading: true, error: null });
     useConnectionStore.getState().setStatus('connecting');
 

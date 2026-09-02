@@ -11,11 +11,9 @@ import type { TemperaturePoint } from '../domain/temperature';
  */
 export class RealtimeBuffer {
   private points: TemperaturePoint[] = [];
-  private readonly maxSize: number;
   private rangeMs: number;
 
-  constructor(maxSize = 2000, rangeMs = 86400000) {
-    this.maxSize = maxSize;
+  constructor(rangeMs = 86400000) {
     this.rangeMs = rangeMs;
   }
 
@@ -55,13 +53,13 @@ export class RealtimeBuffer {
   }
 
   private prune(): void {
+    // 仅按时间窗裁剪：保证完整保留当前区间内的点，避免按固定点数截断导致
+    // 24H 等大字区间的历史被实时流入的点逐步挤出（时间窗塌缩）。
+    // 点数上限天然由「区间时长 × 采样粒度」约束，渲染端再由 ECharts 降采样。
     if (this.points.length === 0) return;
     const latest = this.points[this.points.length - 1].timestamp;
     const cutoff = latest - this.rangeMs;
     const first = this.points.findIndex((p) => p.timestamp >= cutoff);
     if (first > 0) this.points = this.points.slice(first);
-    if (this.points.length > this.maxSize) {
-      this.points = this.points.slice(-this.maxSize);
-    }
   }
 }

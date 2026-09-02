@@ -58,6 +58,5 @@ export const COLD_STORAGE = {
   name: env.VITE_STORAGE_NAME,
 } as const;
 
-/** 实时缓冲上限与默认时间窗 */
-export const BUFFER_MAX_SIZE = 2000;
+/** 默认时间窗 */
 export const DEFAULT_RANGE_MS = 86400000;

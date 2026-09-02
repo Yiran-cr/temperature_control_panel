@@ -11,7 +11,7 @@ const pt = (value: number, timestamp: number): TemperaturePoint => ({
 let buf: RealtimeBuffer;
 
 beforeEach(() => {
-  buf = new RealtimeBuffer(100, 10000); // 窗口 10s，上限 100
+  buf = new RealtimeBuffer(10000); // 窗口 10s
 });
 
 describe('RealtimeBuffer', () => {
@@ -51,11 +51,13 @@ describe('RealtimeBuffer', () => {
     expect(buf.snapshot().map((p) => p.timestamp)).toEqual([2000, 3000]);
   });
 
-  it('超过 maxSize 时截断旧点', () => {
-    for (let i = 0; i < 150; i++) {
-      buf.push(pt(i, i));
+  it('窗口内的点不被点数上限截断（防止时间窗塌缩）', () => {
+    // 100ms 间隔、共 101 点落在 10s 窗口内：按时间窗应全部保留
+    for (let i = 0; i <= 100; i++) {
+      buf.push(pt(i, i * 100));
     }
-    expect(buf.snapshot()).toHaveLength(100);
-    expect(buf.snapshot()[0].timestamp).toBe(50);
+    expect(buf.snapshot()).toHaveLength(101);
+    expect(buf.snapshot()[0].timestamp).toBe(0);
+    expect(buf.snapshot()[101 - 1].timestamp).toBe(10000);
   });
 });

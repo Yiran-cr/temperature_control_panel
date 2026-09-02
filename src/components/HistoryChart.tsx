@@ -36,13 +36,12 @@ export default function HistoryChart({
   const isLarge = useIsLargeScreen();
 
   const option = useMemo(() => {
-    const times = data.map((d) =>
-      new Date(d.timestamp).toLocaleTimeString('zh-CN', {
+    const formatTime = (ts: number) =>
+      new Date(ts).toLocaleTimeString('zh-CN', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-      }),
-    );
+      });
     const values = data.map((d) => d.value);
 
     // 动态 Y 轴范围：以当前数据最高/最低温为基准，
@@ -67,11 +66,12 @@ export default function HistoryChart({
         borderWidth: 1,
         textStyle: { color: '#fff', fontSize: isLarge ? 14 : 12 },
         formatter: (params: unknown) => {
-          const p = (params as Array<{ axisValueLabel: string; value: number }>)[0];
+          const p = (params as Array<{ value: number | [number, number] }>)[0];
           if (!p) return '';
-          const color = toDisplayColor(p.value);
-          return `<span style="color:${color};font-weight:bold;font-size:${isLarge ? 18 : 16}px">${p.value}°C</span><br/>
-                  <span style="color:rgba(255,255,255,0.5)">${p.axisValueLabel}</span>`;
+          const [ts, val] = Array.isArray(p.value) ? p.value : [0, p.value];
+          const color = toDisplayColor(val);
+          return `<span style="color:${color};font-weight:bold;font-size:${isLarge ? 18 : 16}px">${val}°C</span><br/>
+                  <span style="color:rgba(255,255,255,0.5)">${formatTime(ts)}</span>`;
         },
       },
       grid: {
@@ -81,14 +81,14 @@ export default function HistoryChart({
         bottom: isLarge ? 34 : isMobile ? 26 : 30,
       },
       xAxis: {
-        type: 'category',
-        data: times,
+        type: 'time',
         boundaryGap: false,
         axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
         axisLabel: {
           color: 'rgba(255,255,255,0.4)',
           fontSize: isLarge ? 13 : 10,
           fontFamily: 'monospace',
+          formatter: (ts: number) => formatTime(ts),
         },
         splitLine: { show: false },
       },
@@ -113,8 +113,10 @@ export default function HistoryChart({
       series: [
         {
           type: 'line',
-          data: values,
+          data: data.map((d) => [d.timestamp, d.value]),
           smooth: true,
+          // 24H 单窗最多约 8 万点，交由 ECharts LTTB 降采样渲染，保证流畅且不丢形状
+          sampling: 'lttb',
           symbol: 'none',
           lineStyle: {
             color: '#5fd0ff',
